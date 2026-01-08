@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<title>🎰 Kasino + Auto Crypto Broker</title>
+ 
+<style>
+body{background:#1e1e1e;color:#fff;font-family:Arial;margin:0}
+.container{display:flex;justify-content:space-between;padding:20px;gap:20px}
+.box,.crypto{background:#2c2c2c;padding:20px;border-radius:10px;width:1024px}
+input,button,select{padding:8px;margin:4px;cursor:pointer}
+.slot{font-size:15px;margin:4px 0}
+.win{color:#00ff88}
+.lose{color:#ff5555}
+.mid{color:#ffd700}
+canvas{background:#111;border-radius:8px;margin-top:10px}
+.status{font-weight:bold;margin-top:8px}
+.hidden{display:none}
+ 
+#resultsWrap{display:flex;gap:10px;margin-top:10px}
+.col{width:50%;background:#1a1a1a;padding:8px;border-radius:8px}
+h3{margin:0 0 6px;text-align:center;font-size:14px}
+ 
+.numGrid{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin-top:8px}
+.num{padding:6px;text-align:center;border-radius:4px;cursor:pointer;opacity:.4}
+.num.active{opacity:1}
+.red{background:#900}
+.black{background:#111}
+.green{background:#080}
+.sel{outline:3px solid #ffd700}
+</style>
+</head>
+ 
+<body>
+<div class="container">
+ 
+<!-- ===== KASINO ===== -->
+<div class="box">
+<h1>🎰 Kasino</h1>
+ 
+<p><b>Balance:</b> <span id="balance">0</span> Kč</p>
+<p><b>Sázka:</b> <span id="bet">1</span> Kč</p>
+<p><b>Počet toček:</b> <span id="spins">1</span></p>
+ 
+<input type="number" id="amount" min="1" placeholder="Vklad">
+<button onclick="deposit()">Vložit</button><br>
+ 
+<input type="number" id="betInput" min="1" placeholder="Sázka">
+<button onclick="setBet()">Nastavit sázku</button><br>
+ 
+<input type="number" id="spinsInput" min="1" placeholder="Počet toček">
+<button onclick="setSpins()">Nastavit točky</button><br><br>
+ 
+<button onclick="toggleGame()">🔄 Přepnout hru</button>
+<p><b>Hra:</b> <span id="gameModeLabel">🎰 Sloty</span></p>
+ 
+<!-- SLOTY -->
+<div id="slotsPanel">
+<button onclick="spin()">🎰 Točit</button>
+<button onclick="spinAll()">💥 Protočit vše</button>
+<p id="message"></p>
+ 
+<div id="resultsWrap">
+  <div class="col"><h3 class="lose">❌ Prohry</h3><div id="losses"></div></div>
+  <div class="col"><h3 class="mid">🟨 2 stejné</h3><div id="middles"></div></div>
+  <div class="col"><h3 class="win">✅ Výhry</h3><div id="wins"></div></div>
+</div>
+</div>
+ 
+<!-- RULETA -->
+<div id="roulettePanel" class="hidden">
+<h2>🎡 Ruleta</h2>
+ 
+<select id="rouletteType" onchange="onRouletteTypeChange()">
+  <option value="red">🔴 Červená</option>
+  <option value="black">⚫ Černá</option>
+  <option value="even">Sudá</option>
+  <option value="odd">Lichá</option>
+  <option value="low">1–18</option>
+  <option value="high">19–36</option>
+  <option value="number">🎯 Jedno číslo</option>
+  <option value="triple">🎲 3 čísla</option>
+  <option value="green">🟢 Zelená (0)</option>
+</select>
+ 
+<div class="numGrid" id="rouletteNumbers"></div>
+ 
+<button onclick="spinRoulette()">🎡 Roztočit</button>
+<button onclick="spinRouletteAll()">💥 Protočit vše</button>
+<p id="rouletteMessage"></p>
+ 
+<div id="rouletteResultsWrap" style="display:flex;gap:10px;margin-top:10px">
+  <div class="col"><h3 class="lose">❌ Prohry</h3><div id="rouletteLosses"></div></div>
+  <div class="col"><h3 class="win">✅ Výhry</h3><div id="rouletteWins"></div></div>
+</div>
+</div>
+</div>
+ 
+<!-- ===== CRYPTO ===== -->
+<div class="crypto">
+<h1>🪙 Jancoin$tal</h1>
+ 
+<p><b>Cena:</b> <span id="price">0</span> Kč</p>
+<p><b>Držíš:</b> <span id="coins">0</span> JNC</p>
+<p><b>Průměrná nákupní cena:</b> <span id="avgPrice">0</span></p>
+<p><b>Hodnota:</b> <span id="coinValue">0</span></p>
+ 
+<button onclick="buy()">Koupit</button>
+<button onclick="sell()">Prodat</button><br>
+<button onclick="buyAll()">🔥 All-in koupit</button>
+<button onclick="sellAll()">💣 All-in prodat</button>
+ 
+<p class="status">Bot: <span id="botStatus">VYPNUT</span></p>
+<button onclick="toggleBot()">🔁 Zapnout / Vypnout Brokera</button>
+ 
+<canvas id="chart" width="440" height="200"></canvas>
+</div>
+</div>
+ 
+<script>
+// ================= KASINO =================
+let balance=0, bet=1, spins=1;
+let gameMode="slots";
+ 
+const balanceEl=document.getElementById("balance");
+const betEl=document.getElementById("bet");
+const spinsEl=document.getElementById("spins");
+const winsEl=document.getElementById("wins");
+const lossesEl=document.getElementById("losses");
+const midsEl=document.getElementById("middles");
+ 
+function updateUI(){
+  balanceEl.textContent=balance.toFixed(2);
+  betEl.textContent=bet;
+  spinsEl.textContent=spins;
+  updateCryptoUI();
+}
+function message(t){document.getElementById("message").textContent=t;}
+function deposit(){const a=+amount.value;if(a>0){balance+=a;updateUI();}}
+function setBet(){bet=+betInput.value||bet;updateUI();}
+function setSpins(){spins=+spinsInput.value||spins;updateUI();}
+function rand(){return Math.floor(Math.random()*10);}
+ 
+function toggleGame(){
+  gameMode=gameMode==="slots"?"roulette":"slots";
+  slotsPanel.classList.toggle("hidden");
+  roulettePanel.classList.toggle("hidden");
+  gameModeLabel.textContent=gameMode==="slots"?"🎰 Sloty":"🎡 Ruleta";
+}
+ 
+// ===== SLOTY =====
+function spin(){
+  if(gameMode==="roulette")return;
+  const cost=bet*spins;
+  if(cost>balance){message("Nedostatek peněz!");return;}
+ 
+  winsEl.innerHTML=lossesEl.innerHTML=midsEl.innerHTML="";
+  balance-=cost;
+  let totalWin=0;
+ 
+  for(let i=0;i<spins;i++){
+    const n=[rand(),rand(),rand()];
+    const [a,b,c]=n;
+    let win=0,type="lose";
+ 
+    if(a===b&&b===c){
+      type="win";
+      if([1,2,3].includes(a)) win=bet*15;
+      else if([4,5,6].includes(a)) win=bet*25;
+      else if(a===7) win=bet*150;
+      else if([8,9].includes(a)) win=bet*30;
+      else if(a===0) win=bet*50;
+    } else if(a===b||a===c||b===c){
+      type="mid";
+      const p=a===b?a:a===c?a:b;
+      if([1,2,3].includes(p)) win=bet*1.1;
+      else if([4,5,6].includes(p)) win=bet*1.2;
+      else if(p===7) win=bet*1.5;
+      else if([8,9].includes(p)) win=bet*1.3;
+      else if(p===0) win=bet*1.4;
+    } else {
+      for(const v of n){
+        if([1,2,3].includes(v)) win+=bet*0.010*5;
+        else if([4,5,6].includes(v)) win+=bet*0.020*5;
+        else if(v===7) win+=bet*0.050*5;
+        else if([8,9].includes(v)) win+=bet*0.020*5;
+        else if(v===0) win+=bet*0.030*5;
+      }
+    }
+ 
+    totalWin+=win;
+    const r=document.createElement("div");
+    r.className="slot "+(type==="win"?"win":type==="mid"?"mid":"lose");
+    r.textContent=`${n.join(" | ")} → ${win.toFixed(2)} Kč`;
+    (type==="win"?winsEl:type==="mid"?midsEl:lossesEl).appendChild(r);
+  }
+ 
+  balance+=totalWin;
+  message(`🎰 Toček: ${spins} | Výhra: ${totalWin.toFixed(2)} Kč | Návratnost: ${(totalWin/(bet*spins)).toFixed(2)}x`);
+  updateUI();
+}
+ 
+function spinAll(){
+  spins=Math.floor(balance/bet);
+  if(spins>0)spin();
+}
+
+// ================= RULETA =================
+const redNums=[1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
+let selected=[];
+const grid=document.getElementById("rouletteNumbers");
+const rouletteWins=document.getElementById("rouletteWins");
+const rouletteLosses=document.getElementById("rouletteLosses");
+const rouletteMessage=document.getElementById("rouletteMessage");
+
+for(let i=0;i<=36;i++){
+  const d=document.createElement("div");
+  d.className="num "+(i===0?"green":redNums.includes(i)?"red":"black");
+  d.textContent=i;
+  d.onclick=()=>toggleNum(i,d);
+  grid.appendChild(d);
+}
+
+function onRouletteTypeChange(){
+  selected=[];
+  document.querySelectorAll(".num").forEach(n=>n.classList.remove("sel","active"));
+  const t=rouletteType.value;
+  if(t==="number"||t==="triple")
+    document.querySelectorAll(".num").forEach(n=>n.classList.add("active"));
+}
+
+function toggleNum(n,el){
+  const t=rouletteType.value;
+  if(!(t==="number"||t==="triple"))return;
+  if(t==="number"&&selected.length>=1&&!selected.includes(n))return;
+  if(t==="triple"&&selected.length>=3&&!selected.includes(n))return;
+  if(selected.includes(n)){selected=selected.filter(x=>x!==n);el.classList.remove("sel");}
+  else{selected.push(n);el.classList.add("sel");}
+}
+
+function spinRouletteSingle(){
+  const t=rouletteType.value;
+  if(t==="number"&&selected.length!==1)return;
+  if(t==="triple"&&selected.length!==3)return;
+
+  const roll=Math.floor(Math.random()*37);
+  let win=0;
+  const color = roll===0 ? 'G' : redNums.includes(roll) ? 'R' : 'B';
+
+  if(t==="red"&&redNums.includes(roll))win=bet*2;
+  if(t==="black"&&!redNums.includes(roll)&&roll!==0)win=bet*2;
+  if(t==="even"&&roll%2===0&&roll!==0)win=bet*2;
+  if(t==="odd"&&roll%2===1)win=bet*2;
+  if(t==="low"&&roll>=1&&roll<=18)win=bet*2;
+  if(t==="high"&&roll>=19)win=bet*2;
+  if(t==="green"&&roll===0)win=bet*36;
+  if(t==="number"&&selected[0]===roll)win=bet*36;
+  if(t==="triple"&&selected.includes(roll))win=bet*12;
+
+  balance+=win;
+
+  const r=document.createElement("div");
+  r.textContent=`${roll} | ${color} → ${win.toFixed(2)} Kč`;
+  r.className = win>0 ? "win" : "lose";
+  if(win>0) rouletteWins.appendChild(r);
+  else rouletteLosses.appendChild(r);
+}
+
+function spinRoulette(){
+  if(balance<bet){rouletteMessage.textContent="Nedostatek peněz!"; return;}
+  rouletteWins.innerHTML = rouletteLosses.innerHTML = '';
+  rouletteMessage.textContent = '';
+
+  const totalSpins = spins<1 ? 1 : spins;
+  let totalWin=0;
+
+  for(let i=0;i<totalSpins;i++){
+    if(balance<bet) break;
+    balance-=bet;
+
+    const t=rouletteType.value;
+    const roll=Math.floor(Math.random()*37);
+    let win=0;
+    const color = roll===0 ? 'G' : redNums.includes(roll) ? 'R' : 'B';
+
+    if(t==="red"&&redNums.includes(roll))win=bet*2;
+    if(t==="black"&&!redNums.includes(roll)&&roll!==0)win=bet*2;
+    if(t==="even"&&roll%2===0&&roll!==0)win=bet*2;
+    if(t==="odd"&&roll%2===1)win=bet*2;
+    if(t==="low"&&roll>=1&&roll<=18)win=bet*2;
+    if(t==="high"&&roll>=19)win=bet*2;
+    if(t==="green"&&roll===0)win=bet*36;
+    if(t==="number"&&selected[0]===roll)win=bet*36;
+    if(t==="triple"&&selected.includes(roll))win=bet*12;
+
+    balance+=win;
+    totalWin+=win;
+
+    const r=document.createElement("div");
+    r.textContent=`${roll} | ${color} → ${win.toFixed(2)} Kč`;
+    r.className = win>0 ? "win" : "lose";
+    if(win>0) rouletteWins.appendChild(r);
+    else rouletteLosses.appendChild(r);
+  }
+
+  rouletteMessage.textContent = `🎡 Toček: ${totalSpins} | Výhra: ${totalWin.toFixed(2)} Kč | Návratnost: ${(totalWin/(bet*totalSpins)).toFixed(2)}x`;
+  updateUI();
+}
+
+function spinRouletteAll(){
+  spins=Math.floor(balance/bet);
+  spinRoulette();
+}
+
+// ================= CRYPTO =================
+let price=50+Math.random()*200, coins=0, avgBuyPrice=0, history=[], botOn=false;
+const ctx=document.getElementById("chart").getContext("2d");
+
+const priceEl=document.getElementById("price");
+const coinsEl=document.getElementById("coins");
+
+function toggleBot(){
+  botOn=!botOn;
+  botStatus.textContent=botOn?"ZAPNUT":"VYPNUT";
+}
+
+function botLogic(){
+  if(!botOn||history.length<2)return;
+  const p=history.at(-2),l=history.at(-1);
+  if(l<p&&balance>=price)buy();
+  else if(l>p&&coins>=1)sell();
+}
+
+function updateCryptoUI(){
+  priceEl.textContent=price.toFixed(2);
+  coinsEl.textContent=coins.toFixed(4);
+  avgPrice.textContent=avgBuyPrice.toFixed(2);
+  coinValue.textContent=(coins*price).toFixed(2);
+  drawChart();
+}
+
+function marketImpact(v){price=Math.max(1,price+v);}
+function buy(){if(balance>=price){balance-=price;avgBuyPrice=(avgBuyPrice*coins+price)/(coins+1);coins++;marketImpact(price*0.02);}}
+function sell(){if(coins>=1){coins--;balance+=price;marketImpact(-price*0.02);if(coins===0)avgBuyPrice=0;}}
+function buyAll(){const a=Math.floor(balance/price);if(a>0){avgBuyPrice=(avgBuyPrice*coins+price*a)/(coins+a);coins+=a;balance-=price*a;marketImpact(price*a*0.025);}}
+function sellAll(){if(coins>0){marketImpact(-coins*price*0.025);balance+=coins*price;coins=0;avgBuyPrice=0;}}
+
+setInterval(()=>{
+  price=Math.max(1,price+(Math.random()-0.5)*(50+price*0.02));
+  history.push(price); if(history.length>60)history.shift();
+  botLogic(); updateUI();
+},1000);
+
+function drawChart(){
+  ctx.clearRect(0,0,440,200);
+  if(history.length<2)return;
+  const mx=Math.max(...history),mn=Math.min(...history);
+  for(let i=1;i<history.length;i++){
+    const x1=(i-1)*(440/(history.length-1)),x2=i*(440/(history.length-1));
+    const y1=190-((history[i-1]-mn)/(mx-mn))*170;
+    const y2=190-((history[i]-mn)/(mx-mn))*170;
+    ctx.strokeStyle=history[i]>=history[i-1]?"#00ff88":"#ff5555";
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  }
+}
+
+updateUI();
+</script>
+</body>
+</html>
