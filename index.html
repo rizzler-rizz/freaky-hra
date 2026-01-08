@@ -103,7 +103,7 @@ h3{margin:0 0 6px;text-align:center;font-size:14px}
 <p><b>Cena:</b> <span id="price">0</span> Kč</p>
 <p><b>Držíš:</b> <span id="coins">0</span> JNC</p>
 <p><b>Průměrná nákupní cena:</b> <span id="avgPrice">0</span></p>
-<p><b>Hodnota:</b> <span id="coinValue">0</span></p>
+<p><b>Hodnota:</b> <span id="coinValue">0</span> Kč</p>
  
 <button onclick="buy()">Koupit</button>
 <button onclick="sell()">Prodat</button><br>
@@ -238,45 +238,20 @@ function toggleNum(n,el){
   else{selected.push(n);el.classList.add("sel");}
 }
 
-function spinRouletteSingle(){
-  const t=rouletteType.value;
-  if(t==="number"&&selected.length!==1)return;
-  if(t==="triple"&&selected.length!==3)return;
-
-  const roll=Math.floor(Math.random()*37);
-  let win=0;
-  const color = roll===0 ? 'G' : redNums.includes(roll) ? 'R' : 'B';
-
-  if(t==="red"&&redNums.includes(roll))win=bet*2;
-  if(t==="black"&&!redNums.includes(roll)&&roll!==0)win=bet*2;
-  if(t==="even"&&roll%2===0&&roll!==0)win=bet*2;
-  if(t==="odd"&&roll%2===1)win=bet*2;
-  if(t==="low"&&roll>=1&&roll<=18)win=bet*2;
-  if(t==="high"&&roll>=19)win=bet*2;
-  if(t==="green"&&roll===0)win=bet*36;
-  if(t==="number"&&selected[0]===roll)win=bet*36;
-  if(t==="triple"&&selected.includes(roll))win=bet*12;
-
-  balance+=win;
-
-  const r=document.createElement("div");
-  r.textContent=`${roll} | ${color} → ${win.toFixed(2)} Kč`;
-  r.className = win>0 ? "win" : "lose";
-  if(win>0) rouletteWins.appendChild(r);
-  else rouletteLosses.appendChild(r);
-}
-
 function spinRoulette(){
-  if(balance<bet){rouletteMessage.textContent="Nedostatek peněz!"; return;}
+  const totalCost = bet * spins;
+  if(balance < totalCost){ 
+    rouletteMessage.textContent="Nedostatek peněz!"; 
+    return;
+  }
+
   rouletteWins.innerHTML = rouletteLosses.innerHTML = '';
   rouletteMessage.textContent = '';
 
-  const totalSpins = spins<1 ? 1 : spins;
   let totalWin=0;
 
-  for(let i=0;i<totalSpins;i++){
-    if(balance<bet) break;
-    balance-=bet;
+  for(let i=0;i<spins;i++){
+    balance -= bet;
 
     const t=rouletteType.value;
     const roll=Math.floor(Math.random()*37);
@@ -293,8 +268,8 @@ function spinRoulette(){
     if(t==="number"&&selected[0]===roll)win=bet*36;
     if(t==="triple"&&selected.includes(roll))win=bet*12;
 
-    balance+=win;
-    totalWin+=win;
+    balance += win;
+    totalWin += win;
 
     const r=document.createElement("div");
     r.textContent=`${roll} | ${color} → ${win.toFixed(2)} Kč`;
@@ -303,14 +278,55 @@ function spinRoulette(){
     else rouletteLosses.appendChild(r);
   }
 
-  rouletteMessage.textContent = `🎡 Toček: ${totalSpins} | Výhra: ${totalWin.toFixed(2)} Kč | Návratnost: ${(totalWin/(bet*totalSpins)).toFixed(2)}x`;
+  rouletteMessage.textContent = `🎡 Toček: ${spins} | Výhra: ${totalWin.toFixed(2)} Kč | Návratnost: ${(totalWin/(bet*spins)).toFixed(2)}x`;
   updateUI();
 }
 
 function spinRouletteAll(){
-  spins=Math.floor(balance/bet);
-  spinRoulette();
+  const possibleSpins = Math.floor(balance/bet); // počet možných toček podle balance
+  if(possibleSpins < 1) { 
+    rouletteMessage.textContent="Nedostatek peněz!"; 
+    return;
+  }
+
+  rouletteWins.innerHTML = rouletteLosses.innerHTML = '';
+  rouletteMessage.textContent = '';
+
+  let totalWin=0;
+
+  for(let i=0;i<possibleSpins;i++){
+    balance -= bet;
+
+    const t=rouletteType.value;
+    const roll=Math.floor(Math.random()*37);
+    let win=0;
+    const color = roll===0 ? 'G' : redNums.includes(roll) ? 'R' : 'B';
+
+    if(t==="red"&&redNums.includes(roll))win=bet*2;
+    if(t==="black"&&!redNums.includes(roll)&&roll!==0)win=bet*2;
+    if(t==="even"&&roll%2===0&&roll!==0)win=bet*2;
+    if(t==="odd"&&roll%2===1)win=bet*2;
+    if(t==="low"&&roll>=1&&roll<=18)win=bet*2;
+    if(t==="high"&&roll>=19)win=bet*2;
+    if(t==="green"&&roll===0)win=bet*36;
+    if(t==="number"&&selected[0]===roll)win=bet*36;
+    if(t==="triple"&&selected.includes(roll))win=bet*12;
+
+    balance += win;
+    totalWin += win;
+
+    const r=document.createElement("div");
+    r.textContent=`${roll} | ${color} → ${win.toFixed(2)} Kč`;
+    r.className = win>0 ? "win" : "lose";
+    if(win>0) rouletteWins.appendChild(r);
+    else rouletteLosses.appendChild(r);
+  }
+
+  // zobrazí počet skutečně protočených toček, ale **nezmění nastavené spins**
+  rouletteMessage.textContent = `🎡 Toček: ${possibleSpins} | Výhra: ${totalWin.toFixed(2)} Kč | Návratnost: ${(totalWin/(bet*possibleSpins)).toFixed(2)}x`;
+  updateUI();
 }
+
 
 // ================= CRYPTO =================
 let price=50+Math.random()*200, coins=0, avgBuyPrice=0, history=[], botOn=false;
